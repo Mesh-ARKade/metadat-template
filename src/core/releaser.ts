@@ -7,7 +7,6 @@
 
 import { Octokit } from '@octokit/rest';
 import fs from 'fs/promises';
-import path from 'path';
 import type { Artifact, Release } from '../types/index.js';
 
 export class GitHubReleaser {

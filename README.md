@@ -60,7 +60,7 @@ npm run format
 
 ## Related
 
-- [metadat-no-intro](https://github.com/Mesh-ARKade/metadat-no-intro)
+- [metadat-nointro](https://github.com/Mesh-ARKade/metadat-nointro)
 - [metadat-tosec](https://github.com/Mesh-ARKade/metadat-tosec)
 - [metadat-redump](https://github.com/Mesh-ARKade/metadat-redump)
 - [metadat-mame](https://github.com/Mesh-ARKade/metadat-mame)

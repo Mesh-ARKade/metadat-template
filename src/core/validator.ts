@@ -104,7 +104,6 @@ export function extractGameEntries(content: string): ExtractResult {
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
       textNodeName: '#text',
-      ignoreTagName: false,
       parseAttributeValue: true,
       parseTagValue: true
     });

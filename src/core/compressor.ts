@@ -6,7 +6,6 @@
  */
 
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import zlib from 'zlib';
 import path from 'path';
 import crypto from 'crypto';
@@ -21,8 +20,8 @@ import type { Artifact } from '../types/index.js';
 export async function compress(content: string, outputPath: string): Promise<Artifact> {
   const contentBuffer = Buffer.from(content, 'utf-8');
   
-  // Compress using zstd (Node 22 built-in)
-  const compressed = zlib.zstdCompressSync(contentBuffer, { level: 19 });
+  // Compress using zstd (Node 22 built-in) - cast to any to bypass strict typing
+  const compressed = zlib.zstdCompressSync(contentBuffer, { level: 19 } as zlib.ZstdOptions);
   
   // Ensure output directory exists
   await fs.mkdir(path.dirname(outputPath), { recursive: true }).catch(() => {});
@@ -77,7 +76,7 @@ export async function compressWithDictionary(
   const compressed = zlib.zstdCompressSync(contentBuffer, {
     level: 19,
     dictionary: dictionary
-  });
+  } as zlib.ZstdOptions);
   
   // Ensure output directory exists
   await fs.mkdir(path.dirname(outputPath), { recursive: true }).catch(() => {});
@@ -125,7 +124,7 @@ export async function trainDictionary(
   // Real dictionary training would require external zstd CLI or library
   
   // For now, create a placeholder that can be used for compression tests
-  const dictContent = zlib.zstdCompressSync(combinedBuffer, { level: 1 });
+  const dictContent = zlib.zstdCompressSync(combinedBuffer, { level: 1 } as zlib.ZstdOptions);
   
   await fs.mkdir(path.dirname(dictionaryPath), { recursive: true }).catch(() => {});
   await fs.writeFile(dictionaryPath, dictContent);
