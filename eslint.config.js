@@ -30,5 +30,12 @@ export default [
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': 'warn'
     }
+  },
+  {
+    // Special rules for interface contracts - params are intentionally unused
+    files: ['src/contracts/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off'
+    }
   }
 ];
