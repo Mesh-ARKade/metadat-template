@@ -140,3 +140,106 @@ export interface VersionInfo {
   /** Artifact SHA256 hashes for incremental releases */
   artifacts?: Record<string, string>;
 }
+
+// ============================================================================
+// Pipeline State Zod Schemas
+// ============================================================================
+
+import { z } from 'zod';
+
+/**
+ * Zod schema for RomEntry validation
+ */
+export const RomEntrySchema = z.object({
+  name: z.string(),
+  size: z.number().int().nonnegative(),
+  crc: z.string().optional(),
+  md5: z.string().optional(),
+  sha1: z.string().optional(),
+  sha256: z.string().optional()
+});
+
+/**
+ * Zod schema for DAT validation
+ */
+export const DATSchema = z.object({
+  id: z.string().min(1),
+  source: z.string().min(1),
+  system: z.string().min(1),
+  datVersion: z.string(),
+  roms: z.array(RomEntrySchema),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  filePath: z.string().optional()
+});
+
+/**
+ * Zod schema for Artifact validation
+ */
+export const ArtifactSchema = z.object({
+  name: z.string().min(1),
+  path: z.string(),
+  size: z.number().int().nonnegative(),
+  sha256: z.string().length(64),
+  entryCount: z.number().int().nonnegative(),
+  op: z.enum(['upsert', 'unchanged']).optional(),
+  url: z.string().url().optional(),
+  dictionary: z.string().optional(),
+  systems: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    gameCount: z.number().int().nonnegative()
+  })).optional()
+});
+
+/**
+ * Pipeline state schema for fetch phase
+ */
+export const FetchPhaseStateSchema = z.object({
+  source: z.string().min(1),
+  phase: z.literal('fetch'),
+  fetchPath: z.string().optional(),
+  version: z.string().optional(),
+  fetchedAt: z.string().optional()
+});
+
+/**
+ * Pipeline state schema for group phase
+ */
+export const GroupPhaseStateSchema = z.object({
+  source: z.string().min(1),
+  phase: z.literal('group'),
+  fetchPath: z.string().optional(),
+  groupDir: z.string().optional(),
+  groupedAt: z.string().optional()
+});
+
+/**
+ * Pipeline state schema for compress phase
+ */
+export const CompressPhaseStateSchema = z.object({
+  source: z.string().min(1),
+  phase: z.literal('compress'),
+  groupDir: z.string().optional(),
+  artifacts: z.array(ArtifactSchema).optional(),
+  dictPath: z.string().optional(),
+  compressedAt: z.string().optional()
+});
+
+/**
+ * Union of all pipeline phase states
+ */
+export const PipelineStateSchema = z.union([
+  FetchPhaseStateSchema,
+  GroupPhaseStateSchema,
+  CompressPhaseStateSchema
+]);
+
+/**
+ * Validate pipeline state file
+ * @param state State object to validate
+ * @returns Validated state or throws ZodError
+ */
+export function validatePipelineState(state: unknown) {
+  return PipelineStateSchema.parse(state);
+}
