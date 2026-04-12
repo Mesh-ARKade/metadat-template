@@ -2,7 +2,7 @@
  * XmlValidator - Validates XML DAT files
  *
  * @intent Validate XML well-formedness and extract game entries
- * @guarantee Uses fast-xml-parser for fast validation
+ * @guarantee Handles multiple DAT formats with fallback parsers
  */
 
 import fs from 'fs/promises';
@@ -88,7 +88,7 @@ export function checkExtension(filePath: string): ValidationResult {
 }
 
 /**
- * Extract game entries from DAT XML
+ * Extract game entries from DAT XML with multiple format support
  * @param content XML content
  * @returns ExtractResult with games array
  */
@@ -99,7 +99,6 @@ export function extractGameEntries(content: string): ExtractResult {
   }
 
   try {
-    // Use fast-xml-parser to extract game entries
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
@@ -109,43 +108,26 @@ export function extractGameEntries(content: string): ExtractResult {
     });
 
     const parsed = parser.parse(content);
-
-    // Handle different DAT structures
     const games: GameEntry[] = [];
 
+    // Try specific parsers first
     if (parsed.datafile?.game) {
-      const gameData = parsed.datafile.game;
-      // Handle single game or array of games
-      const gameArray = Array.isArray(gameData) ? gameData : [gameData];
-      for (const game of gameArray) {
-        games.push({
-          name: game['@_name'] || game.name,
-          description: game.description,
-          ...game
-        });
-      }
+      extractDatafileGames(parsed.datafile.game, games);
+    } else if (parsed.mame?.machine) {
+      extractMameMachines(parsed.mame.machine, games);
     } else if (parsed.mame?.game) {
-      // Handle MAME format
-      const gameData = parsed.mame.game;
-      const gameArray = Array.isArray(gameData) ? gameData : [gameData];
-      for (const game of gameArray) {
-        games.push({
-          name: game['@_name'] || game.name,
-          description: game.description,
-          ...game
-        });
-      }
+      extractMameMachines(parsed.mame.game, games);
     } else if (parsed.softwarelist?.software) {
-      // Handle MAME Software List format
-      const swData = parsed.softwarelist.software;
-      const swArray = Array.isArray(swData) ? swData : [swData];
-      for (const sw of swArray) {
-        games.push({
-          name: sw['@_name'] || sw.name,
-          description: sw.description,
-          ...sw
-        });
-      }
+      extractSoftwareList(parsed.softwarelist.software, games, parsed.softwarelist['@_name']);
+    } else if (parsed.mame) {
+      // MAME root - search recursively
+      extractAllMameEntries(parsed.mame, games);
+    } else if (parsed.datafile) {
+      // Generic datafile search
+      extractGenericDatafile(parsed.datafile, games);
+    } else {
+      // Last resort: direct extraction
+      extractDirectEntries(parsed, games);
     }
 
     return { valid: true, games };
@@ -155,6 +137,149 @@ export function extractGameEntries(content: string): ExtractResult {
       games: [],
       error: `Parse error: ${(err as Error).message}`
     };
+  }
+}
+
+// --- Helper functions for different XML formats ---
+
+function extractDatafileGames(data: unknown, games: GameEntry[]): void {
+  const arr = Array.isArray(data) ? data : [data];
+  for (const g of arr) {
+    if (g && typeof g === 'object') {
+      games.push({
+        name: g['@_name'] || (g as any).name,
+        description: (g as any).description,
+        ...(g as Record<string, unknown>)
+      });
+    }
+  }
+}
+
+function extractMameMachines(data: unknown, games: GameEntry[]): void {
+  const arr = Array.isArray(data) ? data : [data];
+  for (const m of arr) {
+    if (m && typeof m === 'object') {
+      const n = m['@_name'] || (m as any).name;
+      if (n) {
+        games.push({
+          name: n,
+          description: (m as any).description,
+          year: (m as any).year,
+          manufacturer: (m as any).manufacturer,
+          ...(m as Record<string, unknown>)
+        });
+      }
+    }
+  }
+}
+
+function extractSoftwareList(data: unknown, games: GameEntry[], listName?: string): void {
+  const arr = Array.isArray(data) ? data : [data];
+  for (const s of arr) {
+    if (s && typeof s === 'object') {
+      const n = s['@_name'] || (s as any).name;
+      if (n) {
+        games.push({
+          name: n,
+          description: (s as any).description,
+          year: (s as any).year,
+          publisher: (s as any).publisher,
+          softwarelist: listName,
+          ...(s as Record<string, unknown>)
+        });
+      }
+    }
+  }
+}
+
+function extractAllMameEntries(obj: unknown, games: GameEntry[]): void {
+  if (!obj || typeof obj !== 'object') return;
+  const o = obj as Record<string, unknown>;
+
+  // Check for entries at this level
+  if (o.machine) extractMameMachines(o.machine as unknown, games);
+  else if (o.game) extractMameMachines(o.game as unknown, games);
+  else if (o.machines) extractAllMameEntries(o.machines, games);
+  else if (o.games) extractAllMameEntries(o.games, games);
+
+  // Recurse into other properties
+  for (const [key, value] of Object.entries(o)) {
+    if (value && typeof value === 'object' &&
+        key !== 'machine' && key !== 'game' && key !== 'machines' && key !== 'games') {
+      extractAllMameEntries(value, games);
+    }
+  }
+}
+
+function extractGenericDatafile(datafile: unknown, games: GameEntry[]): void {
+  if (!datafile || typeof datafile !== 'object') return;
+  const d = datafile as Record<string, unknown>;
+
+  const containers = ['game', 'machine', 'software', 'entry', 'item', 'record'];
+  for (const key of Object.keys(d)) {
+    if (containers.includes(key.toLowerCase())) {
+      const data = d[key];
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          if (item && typeof item === 'object') {
+            const entry = item as Record<string, unknown>;
+            const name = entry['@_name'] || entry.name || entry['@name'];
+            if (name) {
+              games.push({
+                name: String(name),
+                description: String(entry.description || ''),
+                ...entry
+              });
+            }
+          }
+        }
+      } else if (data && typeof data === 'object') {
+        const entry = data as Record<string, unknown>;
+        const name = entry['@_name'] || entry.name || entry['@name'];
+        if (name) {
+          games.push({
+            name: String(name),
+            description: String(entry.description || ''),
+            ...entry
+          });
+        }
+      }
+    }
+  }
+}
+
+function extractDirectEntries(obj: unknown, games: GameEntry[]): void {
+  if (!obj || typeof obj !== 'object') return;
+  const o = obj as Record<string, unknown>;
+
+  for (const [, value] of Object.entries(o)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === 'object') {
+          const entry = item as Record<string, unknown>;
+          const name = entry['@_name'] || entry.name || entry['@name'] || entry.id;
+          if (name) {
+            games.push({
+              name: String(name),
+              description: String(entry.description || entry.title || ''),
+              source: 'unknown',
+              ...entry
+            });
+          }
+        }
+      }
+    } else if (value && typeof value === 'object') {
+      const entry = value as Record<string, unknown>;
+      const name = entry['@_name'] || entry.name || entry['@name'] || entry.id;
+      if (name) {
+        games.push({
+          name: String(name),
+          description: String(entry.description || entry.title || ''),
+          source: 'unknown',
+          ...entry
+        });
+      }
+    }
   }
 }
 

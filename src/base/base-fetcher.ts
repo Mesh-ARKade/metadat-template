@@ -31,8 +31,9 @@ export abstract class AbstractFetcher implements IFetcher {
 
   /**
    * Fetch DATs from the source - implemented by subclasses
+   * @param onEntry Optional callback for streaming entries
    */
-  abstract fetchDats(): Promise<DAT[]>;
+  abstract fetchDats(onEntry?: (dat: DAT) => void): Promise<DAT[]>;
 
   /**
    * Get source name - implemented by subclasses
@@ -46,10 +47,11 @@ export abstract class AbstractFetcher implements IFetcher {
 
   /**
    * Main fetch method with retry and rate limiting
+   * @param onEntry Optional callback for streaming entries during fetch
    */
-  async fetch(): Promise<DAT[]> {
+  async fetch(onEntry?: (dat: DAT) => void): Promise<DAT[]> {
     await this.applyRateLimit();
-    return this.executeWithRetry(() => this.fetchDats());
+    return this.executeWithRetry(() => this.fetchDats(onEntry));
   }
 
   /**
@@ -74,6 +76,18 @@ export abstract class AbstractFetcher implements IFetcher {
    */
   protected async updateVersion(version: string): Promise<void> {
     await this.versionTracker.write(this.getSourceName(), version);
+  }
+
+  /**
+   * Validate that entries were actually fetched
+   * @param count Number of entries fetched
+   * @param phase Description of what was being fetched
+   * @throws Error if count is 0
+   */
+  protected validateEntryCount(count: number, phase: string): void {
+    if (count === 0) {
+      throw new Error(`No entries ${phase} - source may be unavailable or parsing failed`);
+    }
   }
 
   /**
@@ -104,7 +118,7 @@ export abstract class AbstractFetcher implements IFetcher {
         return await fn();
       } catch (err) {
         lastError = err as Error;
-        
+
         if (attempt < this.maxRetries) {
           // Exponential backoff
           const delay = this.retryDelay * Math.pow(2, attempt - 1);

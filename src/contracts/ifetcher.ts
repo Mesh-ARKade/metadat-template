@@ -10,9 +10,10 @@ import type { DAT } from '../types/index.js';
 export interface IFetcher {
   /**
    * Fetch DATs from the source
-   * @returns Array of DAT objects
+   * @param onEntry Optional callback for streaming entries during fetch
+   * @returns Array of DAT objects (or empty if using callback)
    */
-  fetch(): Promise<DAT[]>;
+  fetch(onEntry?: (dat: DAT) => void): Promise<DAT[]>;
 
   /**
    * Get the source name

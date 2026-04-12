@@ -45,6 +45,10 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium
 
+      # NOTE: For sources using .7z archives (e.g., ProgettoSnaps), add:
+      # - name: Install 7z for archive extraction
+      #   run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
       - name: Build TypeScript
         run: npm run build
 
